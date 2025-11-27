@@ -75,6 +75,27 @@ class FeatureEvaluation:
   strengths: str
   weaknesses: str
 
+  def to_dict(self) -> dict:
+    """Convert to JSON-serializable dictionary."""
+    # Handle both enum and string values for category fields
+    category = self.feature.category
+    sub_category = self.feature.sub_category
+    video_segment = self.feature.video_segment
+    return {
+        "feature_id": self.feature.id,
+        "feature_name": self.feature.name,
+        "category": category.value if hasattr(category, "value") else category,
+        "sub_category": sub_category.value if hasattr(sub_category, "value") else sub_category,
+        "video_segment": video_segment.value if hasattr(video_segment, "value") else video_segment,
+        "evaluation_criteria": self.feature.evaluation_criteria,
+        "detected": self.detected,
+        "confidence_score": self.confidence_score,
+        "rationale": self.rationale,
+        "evidence": self.evidence,
+        "strengths": self.strengths,
+        "weaknesses": self.weaknesses,
+    }
+
 
 @dataclass
 class VideoAssessment:
@@ -85,6 +106,19 @@ class VideoAssessment:
   long_form_abcd_evaluated_features: list[FeatureEvaluation]
   shorts_evaluated_features: list[FeatureEvaluation]
   config: any  # TODO (ae) change this later
+
+  def to_dict(self) -> dict:
+    """Convert to JSON-serializable dictionary."""
+    return {
+        "brand_name": self.brand_name,
+        "video_uri": self.video_uri,
+        "long_form_abcd_evaluated_features": [
+            f.to_dict() for f in self.long_form_abcd_evaluated_features
+        ],
+        "shorts_evaluated_features": [
+            f.to_dict() for f in self.shorts_evaluated_features
+        ],
+    }
 
 
 @dataclass
