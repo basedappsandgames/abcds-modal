@@ -405,8 +405,8 @@ async def assess_video_endpoint(
   secrets=[modal.Secret.from_name("gcp-credentials")],
   timeout=600,
 )
-@modal.fastapi_endpoint(method="POST", path="/stream")
-async def assess_video_stream(
+@modal.fastapi_endpoint(method="POST")
+async def stream(
   request: dict,
   token: HTTPAuthorizationCredentials = Depends(auth_scheme),
 ):
