@@ -42,7 +42,7 @@ def detect_audio_speech_early_1st_5_secs(
   """
 
   annotation_uri = (
-      f"{gcs_api_service.get_annotation_uri(config, video_uri)}{Annotations.SPEECH_ANNOTATIONS.value}.json"
+      f"{gcs_api_service.get_annotation_uri(video_uri)}{Annotations.SPEECH_ANNOTATIONS.value}.json"
   )
   speech_annotation_results = gcs_api_service.load_blob(annotation_uri)
 

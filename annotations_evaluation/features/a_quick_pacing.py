@@ -74,7 +74,7 @@ def detect(
       quick_pacing, quick_pacing_1st_5_secs: quick pacing evaluation
   """
   annotation_uri = (
-      f"{gcs_api_service.get_annotation_uri(config, video_uri)}{Annotations.GENERIC_ANNOTATIONS.value}.json"
+      f"{gcs_api_service.get_annotation_uri(video_uri)}{Annotations.GENERIC_ANNOTATIONS.value}.json"
   )
   shot_annotation_results = gcs_api_service.load_blob(annotation_uri)
 

@@ -80,7 +80,7 @@ def detect(
       product_mention_speech_1st_5_secs: product mention speech evaluation
   """
   annotation_uri = (
-      f"{gcs_api_service.get_annotation_uri(config, video_uri)}{Annotations.SPEECH_ANNOTATIONS.value}.json"
+      f"{gcs_api_service.get_annotation_uri(video_uri)}{Annotations.SPEECH_ANNOTATIONS.value}.json"
   )
   speech_annotation_results = gcs_api_service.load_blob(annotation_uri)
 

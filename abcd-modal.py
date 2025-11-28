@@ -182,7 +182,6 @@ def assess_video(
     config.run_long_form_abcd = run_long_form_abcd
     config.run_shorts = run_shorts
     config.creative_provider_type = provider_type
-    config.annotation_path = f"gs://{bucket_name}/ABCD/" if bucket_name else ""
     config.extract_brand_metadata = should_extract_brand
     config.verbose = verbose
     config.knowledge_graph_api_key = knowledge_graph_api_key

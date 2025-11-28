@@ -42,7 +42,7 @@ def detect_supers(
   """
 
   annotation_uri = (
-      f"{gcs_api_service.get_annotation_uri(config, video_uri)}{Annotations.GENERIC_ANNOTATIONS.value}.json"
+      f"{gcs_api_service.get_annotation_uri(video_uri)}{Annotations.GENERIC_ANNOTATIONS.value}.json"
   )
   text_annotation_results = gcs_api_service.load_blob(annotation_uri)
 
@@ -76,14 +76,14 @@ def detect_supers_with_audio(
   """
 
   t_annotation_uri = (
-      f"{get_annotation_uri(config, video_uri)}{Annotations.GENERIC_ANNOTATIONS.value}.json"
+      f"{gcs_api_service.get_annotation_uri(video_uri)}{Annotations.GENERIC_ANNOTATIONS.value}.json"
   )
-  text_annotation_results = load_blob(t_annotation_uri)
+  text_annotation_results = gcs_api_service.load_blob(t_annotation_uri)
 
   s_annotation_uri = (
-      f"{get_annotation_uri(config, video_uri)}{Annotations.SPEECH_ANNOTATIONS.value}.json"
+      f"{gcs_api_service.get_annotation_uri(video_uri)}{Annotations.SPEECH_ANNOTATIONS.value}.json"
   )
-  speech_annotation_results = load_blob(s_annotation_uri)
+  speech_annotation_results = gcs_api_service.load_blob(s_annotation_uri)
 
   # Feature Supers with Audio
   supers_with_audio = False

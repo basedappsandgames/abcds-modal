@@ -79,7 +79,7 @@ def detect(
   """
 
   annotation_uri = (
-      f"{gcs_api_service.get_annotation_uri(config, video_uri)}{Annotations.FACE_ANNOTATIONS.value}.json"
+      f"{gcs_api_service.get_annotation_uri(video_uri)}{Annotations.FACE_ANNOTATIONS.value}.json"
   )
   face_annotation_results = gcs_api_service.load_blob(annotation_uri)
 

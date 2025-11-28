@@ -44,7 +44,7 @@ def detect_call_to_action_speech(
   """
 
   annotation_uri = (
-      f"{gcs_api_service.get_annotation_uri(config, video_uri)}{Annotations.SPEECH_ANNOTATIONS.value}.json"
+      f"{gcs_api_service.get_annotation_uri(video_uri)}{Annotations.SPEECH_ANNOTATIONS.value}.json"
   )
   speech_annotation_results = gcs_api_service.load_blob(annotation_uri)
 
@@ -94,7 +94,7 @@ def detect_call_to_action_text(
   """
 
   annotation_uri = (
-      f"{gcs_api_service.get_annotation_uri(config, video_uri)}{Annotations.GENERIC_ANNOTATIONS.value}.json"
+      f"{gcs_api_service.get_annotation_uri(video_uri)}{Annotations.GENERIC_ANNOTATIONS.value}.json"
   )
   text_annotation_results = gcs_api_service.load_blob(annotation_uri)
 

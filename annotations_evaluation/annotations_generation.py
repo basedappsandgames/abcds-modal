@@ -127,7 +127,7 @@ def generate_video_annotations(config: Configuration, video_uri: str) -> None:
   # Video annotations processing
 
   tasks = []
-  annotation_uri = gcs_api_service.get_annotation_uri(config, video_uri)
+  annotation_uri = gcs_api_service.get_annotation_uri(video_uri)
 
   standard_annotations_uri = (
       f"{annotation_uri}{Annotations.GENERIC_ANNOTATIONS.value}.json"

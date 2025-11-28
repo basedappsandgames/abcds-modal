@@ -49,7 +49,6 @@ class Configuration:
     self.bq_table_name: str = "abcd_assessments"
     self.assessment_file: str = ""
     self.verbose: bool = True
-    self.annotation_path: str = ""
     self.extract_brand_metadata = True
     self.use_annotations = False
     self.use_llms = True
@@ -133,8 +132,6 @@ class Configuration:
 
     if creative_provider_type == CreativeProviderType.YOUTUBE.value:
       self.creative_provider_type = CreativeProviderType.YOUTUBE
-
-    self.annotation_path = f"gs://{bucket_name}/ABCD/"
 
   def set_videos(self, video_uris: list) -> None:
     """Set the videos that will be processed.

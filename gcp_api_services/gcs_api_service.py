@@ -2,7 +2,6 @@
 
 import json
 from google.cloud import storage
-from configuration import Configuration
 
 
 class GCSAPIService:
@@ -14,19 +13,13 @@ class GCSAPIService:
   def get_client(self):
     return self.client
 
-  def get_annotation_uri(self, config: Configuration, video_uri: str) -> str:
-    """Helper to translate video to annotation uri."""
-    # TODO (ae) this does not work with 1st_5_secs URLs
-    uri = (
-        video_uri.replace("gs://", config.annotation_path).replace(".", "_")
-        + "/"
-    )
+  def get_annotation_uri(self, video_uri: str) -> str:
+    """Helper to translate video to annotation uri by stripping the filename."""
+    return video_uri.rsplit("/", 1)[0] + "/"
 
-    return uri
-
-  def get_reduced_uri(self, config: Configuration, video_uri: str) -> str:
+  def get_reduced_uri(self, video_uri: str) -> str:
     """Helper to translate video to reduced video uri."""
-    return self.get_annotation_uri(config, video_uri) + "reduced_1st_5_secs.mp4"
+    return self.get_annotation_uri(video_uri) + "reduced_1st_5_secs.mp4"
 
   def get_blob(self, uri: str) -> any:
     """Return GCS blob object from full uri."""

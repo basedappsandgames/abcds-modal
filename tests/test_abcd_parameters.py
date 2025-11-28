@@ -38,7 +38,6 @@ class ArgsMock:
   use_annotations: str
   use_llms: bool
   verbose: bool
-  annotation_path: str
   # set videos
   video_uris: str
   # set brand
@@ -77,7 +76,6 @@ def test_not_empty_abcd_params():
       use_annotations=True,
       use_llms=True,
       verbose=True,
-      annotation_path="",
       video_uris="gs://abcd-detector-input/Google/videos/",
       brand_name="Google",
       brand_variations="Google,google",
@@ -110,7 +108,6 @@ def test_not_empty_abcd_params():
   assert config.use_annotations is not None
   assert config.use_llms is not None
   assert config.verbose is not None
-  assert config.annotation_path is not None
 
   # set videos
   assert config.video_uris is not None

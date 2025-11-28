@@ -90,9 +90,7 @@ def trim_video(config: Configuration, video_uri: str):
       config: all the parameters
       video_uri: the video to trim the length for
   """
-  reduced_uri = gcs_api_service.gcs_api_service.get_reduced_uri(
-      config, video_uri
-  )
+  reduced_uri = gcs_api_service.gcs_api_service.get_reduced_uri(video_uri)
   reduced_blob = gcs_api_service.gcs_api_service.get_blob(reduced_uri)
   print(f"REDUCED: {reduced_uri} \n")
   if reduced_blob is None:
