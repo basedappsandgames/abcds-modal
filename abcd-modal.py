@@ -1,10 +1,13 @@
 """Modal deployment for ABCD Detector."""
 
+import asyncio
+import json
 import os
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import Depends, HTTPException, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 import modal
@@ -395,6 +398,112 @@ async def assess_video_endpoint(
     dynamic_cutoff_ms=request.get("dynamic_cutoff_ms", 3000.0),
   )
   return JSONResponse(content=result)
+
+
+@app.function(
+  image=image,
+  secrets=[modal.Secret.from_name("gcp-credentials")],
+  timeout=600,
+)
+@modal.fastapi_endpoint(method="POST", path="/stream")
+async def assess_video_stream(
+  request: dict,
+  token: HTTPAuthorizationCredentials = Depends(auth_scheme),
+):
+  """
+  Streaming HTTP endpoint for ABCD video assessment.
+
+  Works exactly like assess_video_endpoint but uses streaming responses
+  to avoid timeout issues. Sends keep-alive messages every 60 seconds
+  while processing, then sends the final result.
+
+  The response is newline-delimited JSON (NDJSON):
+  - Keep-alive messages: {"status": "processing"}
+  - Final result: {"status": "complete", "result": {...}}
+  - Error: {"status": "error", "error": "..."}
+
+  Request body: Same as assess_video_endpoint
+  Headers: Authorization: Bearer <token>
+  """
+  # Check authorization token
+  if token.credentials != os.environ["AUTH_TOKEN"]:
+    raise HTTPException(
+      status_code=status.HTTP_401_UNAUTHORIZED,
+      detail="Incorrect bearer token",
+      headers={"WWW-Authenticate": "Bearer"},
+    )
+
+  async def stream_evaluation():
+    """Generator that yields keep-alive messages while evaluation runs."""
+    # Run the blocking Modal function in a thread pool
+    loop = asyncio.get_event_loop()
+    executor = ThreadPoolExecutor(max_workers=1)
+
+    def run_assessment():
+      return assess_video.remote(
+        gcs_uri=request["gcs_uri"],
+        project_id=request["project_id"],
+        bucket_name=request.get("bucket_name", ""),
+        brand_name=request.get("brand_name", ""),
+        brand_variations=request.get("brand_variations", ""),
+        products=request.get("products", ""),
+        products_categories=request.get("products_categories", ""),
+        call_to_actions=request.get("call_to_actions", ""),
+        use_annotations=request.get("use_annotations", False),
+        run_long_form_abcd=request.get("run_long_form_abcd", True),
+        run_shorts=request.get("run_shorts", True),
+        project_zone=request.get("project_zone", "us-central1"),
+        use_llms=request.get("use_llms", True),
+        extract_brand_metadata=request.get("extract_brand_metadata"),
+        verbose=request.get("verbose", True),
+        creative_provider_type=request.get("creative_provider_type", "GCS"),
+        features_to_evaluate=request.get("features_to_evaluate", ""),
+        bq_dataset_name=request.get("bq_dataset_name", ""),
+        bq_table_name=request.get("bq_table_name", ""),
+        assessment_file=request.get("assessment_file", ""),
+        knowledge_graph_api_key=request.get("knowledge_graph_api_key", ""),
+        llm_name=request.get("llm_name", "gemini-2.5-pro"),
+        llm_location=request.get("llm_location", "us-central1"),
+        max_output_tokens=request.get("max_output_tokens", 65535),
+        temperature=request.get("temperature", 1.0),
+        top_p=request.get("top_p", 0.95),
+        early_time_seconds=request.get("early_time_seconds", 5.0),
+        confidence_threshold=request.get("confidence_threshold", 0.5),
+        face_surface_threshold=request.get("face_surface_threshold", 0.15),
+        logo_size_threshold=request.get("logo_size_threshold", 3.5),
+        avg_shot_duration_seconds=request.get("avg_shot_duration_seconds", 2.0),
+        dynamic_cutoff_ms=request.get("dynamic_cutoff_ms", 3000.0),
+      )
+
+    # Start the assessment task
+    future = loop.run_in_executor(executor, run_assessment)
+
+    # Send initial processing message
+    yield json.dumps({"status": "processing"}) + "\n"
+
+    # Send keep-alive messages every 60 seconds while waiting
+    while not future.done():
+      try:
+        # Wait up to 60 seconds for the result
+        await asyncio.wait_for(asyncio.shield(future), timeout=60)
+        break  # Result is ready
+      except asyncio.TimeoutError:
+        # Still processing, send keep-alive
+        yield json.dumps({"status": "processing"}) + "\n"
+
+    # Get the result (will raise if there was an error)
+    try:
+      result = await future
+      yield json.dumps({"status": "complete", "result": result}) + "\n"
+    except Exception as e:
+      yield json.dumps({"status": "error", "error": str(e)}) + "\n"
+    finally:
+      executor.shutdown(wait=False)
+
+  return StreamingResponse(
+    stream_evaluation(),
+    media_type="application/x-ndjson",
+  )
 
 
 # Local entry point for testing
