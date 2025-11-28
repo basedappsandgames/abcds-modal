@@ -67,7 +67,7 @@ class VideoEvaluationService:
               == models.VideoSegment.FIRST_5_SECS_VIDEO.value
           ):
             uri = gcs_api_service.gcs_api_service.get_reduced_uri(
-                config, video_uri
+                video_uri
             )
           else:
             uri = video_uri
@@ -103,7 +103,7 @@ class VideoEvaluationService:
             and config.creative_provider_type == models.CreativeProviderType.GCS
         ):
           uri = gcs_api_service.gcs_api_service.get_reduced_uri(
-              config, video_uri
+              video_uri
           )
         else:
           uri = video_uri
