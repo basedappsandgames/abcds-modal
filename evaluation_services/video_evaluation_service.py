@@ -22,6 +22,7 @@ class VideoEvaluationService:
       config: configuration.Configuration,
       video_uri: str,
       features_category: models.VideoFeatureCategory,
+      on_task_complete=None,
   ):
     """Run ABCD evaluation on videos for Full ABCD features or Shorts"""
 
@@ -126,7 +127,7 @@ class VideoEvaluationService:
 
     logging.info("Starting ABCD evaluation for features... \n")
 
-    llm_evals = generic_helpers.execute_tasks_in_parallel(tasks)
+    llm_evals = generic_helpers.execute_tasks_in_parallel(tasks, on_task_complete)
 
     # Process LLM results and create feature objs in the required format
     for evals in llm_evals:

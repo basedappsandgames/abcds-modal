@@ -496,11 +496,20 @@ def build_features_for_bq(
   return assessment_bq
 
 
-def execute_tasks_in_parallel(tasks: list[any]) -> None:
-  """Executes a list of tasks in parallel"""
+def execute_tasks_in_parallel(tasks: list[any], on_task_complete=None) -> None:
+  """Executes a list of tasks in parallel
+
+  Args:
+    tasks: List of callables to execute
+    on_task_complete: Optional callback(result) called when each task completes,
+                      where result is the return value of the task (typically a list of features)
+  """
   results = []
   with ThreadPoolExecutor() as executor:
     running_tasks = [executor.submit(task) for task in tasks]
     for running_task in running_tasks:
-      results.append(running_task.result())
+      result = running_task.result()
+      results.append(result)
+      if on_task_complete:
+        on_task_complete(result)
   return results

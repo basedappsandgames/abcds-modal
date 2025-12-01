@@ -3,6 +3,7 @@
 import asyncio
 import json
 import os
+import queue
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
 
@@ -411,14 +412,13 @@ async def stream(
   token: HTTPAuthorizationCredentials = Depends(auth_scheme),
 ):
   """
-  Streaming HTTP endpoint for ABCD video assessment.
+  Streaming HTTP endpoint for ABCD video assessment with progress updates.
 
   Works exactly like assess_video_endpoint but uses streaming responses
-  to avoid timeout issues. Sends keep-alive messages every 60 seconds
-  while processing, then sends the final result.
+  to avoid timeout issues. Sends progress updates as features complete.
 
   The response is newline-delimited JSON (NDJSON):
-  - Keep-alive messages: {"status": "processing"}
+  - Progress: {"status": "processing", "step": "Evaluating long-form ABCD features", "progress": "5/12"}
   - Final result: {"status": "complete", "result": {...}}
   - Error: {"status": "error", "error": "..."}
 
@@ -434,70 +434,326 @@ async def stream(
     )
 
   async def stream_evaluation():
-    """Generator that yields keep-alive messages while evaluation runs."""
-    # Run the blocking Modal function in a thread pool
+    """Generator that yields progress updates as evaluation runs."""
     loop = asyncio.get_event_loop()
     executor = ThreadPoolExecutor(max_workers=1)
 
-    def run_assessment():
-      return assess_video.remote(
-        gcs_uri=request["gcs_uri"],
-        project_id=request["project_id"],
-        bucket_name=request.get("bucket_name", ""),
-        brand_name=request.get("brand_name", ""),
-        brand_variations=request.get("brand_variations", ""),
-        products=request.get("products", ""),
-        products_categories=request.get("products_categories", ""),
-        call_to_actions=request.get("call_to_actions", ""),
-        use_annotations=request.get("use_annotations", False),
-        run_long_form_abcd=request.get("run_long_form_abcd", True),
-        run_shorts=request.get("run_shorts", True),
-        project_zone=request.get("project_zone", "us-central1"),
-        use_llms=request.get("use_llms", True),
-        extract_brand_metadata=request.get("extract_brand_metadata"),
-        verbose=request.get("verbose", True),
-        creative_provider_type=request.get("creative_provider_type", "GCS"),
-        features_to_evaluate=request.get("features_to_evaluate", ""),
-        bq_dataset_name=request.get("bq_dataset_name", ""),
-        bq_table_name=request.get("bq_table_name", ""),
-        assessment_file=request.get("assessment_file", ""),
-        knowledge_graph_api_key=request.get("knowledge_graph_api_key", ""),
-        llm_name=request.get("llm_name", "gemini-2.5-pro"),
-        llm_location=request.get("llm_location", "us-central1"),
-        max_output_tokens=request.get("max_output_tokens", 65535),
-        temperature=request.get("temperature", 1.0),
-        top_p=request.get("top_p", 0.95),
-        early_time_seconds=request.get("early_time_seconds", 5.0),
-        confidence_threshold=request.get("confidence_threshold", 0.5),
-        face_surface_threshold=request.get("face_surface_threshold", 0.15),
-        logo_size_threshold=request.get("logo_size_threshold", 3.5),
-        avg_shot_duration_seconds=request.get("avg_shot_duration_seconds", 2.0),
-        dynamic_cutoff_ms=request.get("dynamic_cutoff_ms", 3000.0),
+    # Thread-safe queue for progress updates from worker threads
+    progress_queue = queue.Queue()
+
+    # Mutable containers for tracking progress
+    completed = [0]
+    total = [0]
+    current_step = ["Initializing"]
+
+    def progress_msg() -> str:
+      return json.dumps({
+        "status": "processing",
+        "step": current_step[0],
+        "progress": f"{completed[0]}/{total[0]}"
+      }) + "\n"
+
+    def on_task_complete(result):
+      """Callback when a feature task completes - called from worker threads.
+      Result is the list of evaluated features from this task."""
+      # Increment by number of features in this task (result is a list of features)
+      features_count = len(result) if isinstance(result, list) else 1
+      completed[0] += features_count
+      progress_queue.put(("task_done", completed[0], total[0]))
+
+    # Storage for results from run_with_keepalive
+    task_result = [None]
+
+    async def run_with_keepalive(func, step_name: str):
+      """Run func while yielding progress updates every 2 seconds.
+      Also sends keep-alive every 30 seconds even if no progress."""
+      import time
+      current_step[0] = step_name
+      future = loop.run_in_executor(executor, func)
+      last_keepalive = time.time()
+      keepalive_interval = 30  # Send keep-alive at least every 30 seconds
+
+      while not future.done():
+        try:
+          task_result[0] = await asyncio.wait_for(asyncio.shield(future), timeout=2)
+          # Drain any remaining progress updates
+          while not progress_queue.empty():
+            progress_queue.get_nowait()
+            yield progress_msg()
+          return
+        except asyncio.TimeoutError:
+          # Check for progress updates from worker threads
+          updates_found = False
+          while not progress_queue.empty():
+            progress_queue.get_nowait()
+            updates_found = True
+
+          now = time.time()
+          # Yield if we have updates OR if 30 seconds passed (keep-alive)
+          if updates_found or (now - last_keepalive) >= keepalive_interval:
+            yield progress_msg()
+            last_keepalive = now
+
+      task_result[0] = await future
+
+    creds_path = None
+
+    try:
+      # Import modules and count total work items
+      creds_path = setup_gcp_credentials()
+
+      import models
+      from annotations_evaluation import annotations_generation
+      from configuration import Configuration
+      from evaluation_services import video_evaluation_service
+      from features_repository import feature_configs_handler
+      from helpers import generic_helpers
+      from models import CreativeProviderType, VideoFeatureCategory
+
+      # Extract request parameters
+      use_annotations = request.get("use_annotations", False)
+      run_long_form_abcd = request.get("run_long_form_abcd", True)
+      run_shorts = request.get("run_shorts", True)
+      creative_provider_type = request.get("creative_provider_type", "GCS")
+      bq_table_name = request.get("bq_table_name", "")
+
+      # Count total items: base steps + feature tasks
+      # Base steps: setup(1) + config(1) + build(1) + cleanup(1) = 4
+      base_steps = 4
+      if use_annotations and creative_provider_type == "GCS":
+        base_steps += 1  # annotations step
+      if run_long_form_abcd and creative_provider_type == "GCS":
+        base_steps += 1  # trim step
+      if bq_table_name:
+        base_steps += 1  # store step
+
+      # Count feature tasks (sum individual features, not groups)
+      long_form_tasks = 0
+      shorts_tasks = 0
+      if run_long_form_abcd:
+        long_form_groups = feature_configs_handler.features_configs_handler.get_features_by_category_by_group_config(
+          VideoFeatureCategory.LONG_FORM_ABCD
+        )
+        long_form_tasks = sum(len(features) for features in long_form_groups.values())
+      if run_shorts:
+        shorts_groups = feature_configs_handler.features_configs_handler.get_features_by_category_by_group_config(
+          VideoFeatureCategory.SHORTS
+        )
+        shorts_tasks = sum(len(features) for features in shorts_groups.values())
+
+      total[0] = base_steps + long_form_tasks + shorts_tasks
+      completed[0] = 0
+
+      # Step: Setup credentials (already done above)
+      completed[0] = 1
+      current_step[0] = "Setting up credentials"
+      yield progress_msg()
+
+      # Step: Build configuration
+      completed[0] = 2
+      current_step[0] = "Building configuration"
+      yield progress_msg()
+
+      # Extract remaining request parameters
+      gcs_uri = request["gcs_uri"]
+      project_id = request["project_id"]
+      bucket_name = request.get("bucket_name", "")
+      brand_name = request.get("brand_name", "")
+      brand_variations = request.get("brand_variations", "")
+      products = request.get("products", "")
+      products_categories = request.get("products_categories", "")
+      call_to_actions = request.get("call_to_actions", "")
+      project_zone = request.get("project_zone", "us-central1")
+      use_llms = request.get("use_llms", True)
+      extract_brand_metadata = request.get("extract_brand_metadata")
+      verbose = request.get("verbose", True)
+      features_to_evaluate = request.get("features_to_evaluate", "")
+      bq_dataset_name = request.get("bq_dataset_name", "")
+      assessment_file = request.get("assessment_file", "")
+      knowledge_graph_api_key = request.get("knowledge_graph_api_key", "")
+      llm_name = request.get("llm_name", "gemini-2.5-pro")
+      llm_location = request.get("llm_location", "us-central1")
+      max_output_tokens = request.get("max_output_tokens", 65535)
+      temperature = request.get("temperature", 1.0)
+      top_p = request.get("top_p", 0.95)
+      early_time_seconds = request.get("early_time_seconds", 5.0)
+      confidence_threshold = request.get("confidence_threshold", 0.5)
+      face_surface_threshold = request.get("face_surface_threshold", 0.15)
+      logo_size_threshold = request.get("logo_size_threshold", 3.5)
+      avg_shot_duration_seconds = request.get("avg_shot_duration_seconds", 2.0)
+      dynamic_cutoff_ms = request.get("dynamic_cutoff_ms", 3000.0)
+
+      # Determine creative provider type
+      provider_type = CreativeProviderType[creative_provider_type.upper()]
+
+      # Validate URI matches provider type
+      if provider_type == CreativeProviderType.GCS and "gs://" not in gcs_uri:
+        raise ValueError(f"Creative provider GCS does not match video URI {gcs_uri}")
+      if provider_type == CreativeProviderType.YOUTUBE and "youtube.com" not in gcs_uri:
+        raise ValueError(f"Creative provider YOUTUBE does not match video URI {gcs_uri}")
+
+      # Extract bucket name from URI if not provided
+      if not bucket_name and gcs_uri.startswith("gs://"):
+        bucket_name = gcs_uri.replace("gs://", "").split("/")[0]
+
+      # Determine extract_brand_metadata setting
+      should_extract_brand = (
+        extract_brand_metadata if extract_brand_metadata is not None
+        else not brand_name
       )
 
-    # Start the assessment task
-    future = loop.run_in_executor(executor, run_assessment)
+      # Build configuration
+      config = Configuration()
+      config.project_id = project_id
+      config.project_zone = project_zone
+      config.bucket_name = bucket_name
+      config.video_uris = [gcs_uri]
+      config.use_annotations = use_annotations
+      config.use_llms = use_llms
+      config.run_long_form_abcd = run_long_form_abcd
+      config.run_shorts = run_shorts
+      config.creative_provider_type = provider_type
+      config.extract_brand_metadata = should_extract_brand
+      config.verbose = verbose
+      config.knowledge_graph_api_key = knowledge_graph_api_key
+      config.bq_dataset_name = bq_dataset_name
+      config.bq_table_name = bq_table_name
+      config.assessment_file = assessment_file
 
-    # Send initial processing message
-    yield json.dumps({"status": "processing"}) + "\n"
+      if features_to_evaluate:
+        config.features_to_evaluate = [
+          f.strip() for f in features_to_evaluate.split(",") if f.strip()
+        ]
 
-    # Send keep-alive messages every 60 seconds while waiting
-    while not future.done():
-      try:
-        # Wait up to 60 seconds for the result
-        await asyncio.wait_for(asyncio.shield(future), timeout=60)
-        break  # Result is ready
-      except asyncio.TimeoutError:
-        # Still processing, send keep-alive
-        yield json.dumps({"status": "processing"}) + "\n"
+      config.llm_params.model_name = llm_name
+      config.llm_params.location = llm_location
+      config.llm_params.generation_config = {
+        "max_output_tokens": max_output_tokens,
+        "temperature": temperature,
+        "top_p": top_p,
+        "response_schema": {"type": "string"},
+      }
 
-    # Get the result (will raise if there was an error)
-    try:
-      result = await future
-      yield json.dumps({"status": "complete", "result": result}) + "\n"
+      config.early_time_seconds = early_time_seconds
+      config.confidence_threshold = confidence_threshold
+      config.face_surface_threshold = face_surface_threshold
+      config.logo_size_threshold = logo_size_threshold
+      config.avg_shot_duration_seconds = avg_shot_duration_seconds
+      config.dynamic_cutoff_ms = dynamic_cutoff_ms
+
+      if brand_name:
+        config.brand_name = brand_name
+        config.brand_variations = [v.strip() for v in brand_variations.split(",") if v.strip()]
+        config.branded_products = [p.strip() for p in products.split(",") if p.strip()]
+        config.branded_products_categories = [c.strip() for c in products_categories.split(",") if c.strip()]
+        config.branded_call_to_actions = [a.strip() for a in call_to_actions.split(",") if a.strip()]
+
+      # Step: Generate annotations (if enabled)
+      if use_annotations and provider_type == CreativeProviderType.GCS:
+        completed[0] += 1
+        current_step[0] = "Generating video annotations"
+        yield progress_msg()
+        async for msg in run_with_keepalive(
+          lambda: annotations_generation.generate_video_annotations(config, gcs_uri),
+          "Generating video annotations"
+        ):
+          yield msg
+
+      # Step: Trim video (if needed)
+      if run_long_form_abcd and provider_type == CreativeProviderType.GCS:
+        completed[0] += 1
+        current_step[0] = "Trimming video"
+        yield progress_msg()
+        async for msg in run_with_keepalive(
+          lambda: generic_helpers.trim_video(config, gcs_uri),
+          "Trimming video"
+        ):
+          yield msg
+
+      # Step: Evaluate long-form ABCD (progress updates per feature task)
+      long_form_results = []
+      if run_long_form_abcd:
+        current_step[0] = "Evaluating long-form ABCD features"
+        yield progress_msg()
+        async for msg in run_with_keepalive(
+          lambda: video_evaluation_service.video_evaluation_service.evaluate_features(
+            config=config,
+            video_uri=gcs_uri,
+            features_category=VideoFeatureCategory.LONG_FORM_ABCD,
+            on_task_complete=on_task_complete,
+          ),
+          "Evaluating long-form ABCD features"
+        ):
+          yield msg
+        long_form_results = task_result[0]
+
+      # Step: Evaluate Shorts (progress updates per feature task)
+      shorts_results = []
+      if run_shorts:
+        current_step[0] = "Evaluating Shorts features"
+        yield progress_msg()
+        async for msg in run_with_keepalive(
+          lambda: video_evaluation_service.video_evaluation_service.evaluate_features(
+            config=config,
+            video_uri=gcs_uri,
+            features_category=VideoFeatureCategory.SHORTS,
+            on_task_complete=on_task_complete,
+          ),
+          "Evaluating Shorts features"
+        ):
+          yield msg
+        shorts_results = task_result[0]
+
+      # Step: Build assessment
+      completed[0] += 1
+      current_step[0] = "Building assessment"
+      yield progress_msg()
+
+      assessment = models.VideoAssessment(
+        brand_name=config.brand_name,
+        video_uri=gcs_uri,
+        long_form_abcd_evaluated_features=long_form_results,
+        shorts_evaluated_features=shorts_results,
+        config=config,
+      )
+
+      if verbose:
+        if long_form_results:
+          generic_helpers.print_abcd_assessment(
+            assessment.brand_name, assessment.video_uri, long_form_results
+          )
+        if shorts_results:
+          generic_helpers.print_abcd_assessment(
+            assessment.brand_name, assessment.video_uri, shorts_results
+          )
+
+      # Step: Store in BigQuery (if configured)
+      if bq_table_name:
+        completed[0] += 1
+        current_step[0] = "Storing results in BigQuery"
+        yield progress_msg()
+        async for msg in run_with_keepalive(
+          lambda: generic_helpers.store_in_bq(config, assessment),
+          "Storing results in BigQuery"
+        ):
+          yield msg
+
+      # Step: Cleanup
+      completed[0] += 1
+      current_step[0] = "Cleaning up"
+      yield progress_msg()
+      await loop.run_in_executor(executor, generic_helpers.remove_local_video_files)
+
+      # Done!
+      yield json.dumps({"status": "complete", "result": assessment.to_dict()}) + "\n"
+
     except Exception as e:
       yield json.dumps({"status": "error", "error": str(e)}) + "\n"
+
     finally:
+      # Cleanup credentials file
+      if creds_path and os.path.exists(creds_path):
+        os.remove(creds_path)
       executor.shutdown(wait=False)
 
   return StreamingResponse(
