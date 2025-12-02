@@ -244,3 +244,18 @@ Please follow the steps below before executing the ABCDs Detector solution. Ever
 * [Google Video Intelligence API](https://cloud.google.com/video-intelligence?hl=en)
 * [Vertex AI](https://cloud.google.com/vertex-ai)
 * [ABCD Framework best practices](https://www.thinkwithgoogle.com/intl/en-emea/future-of-marketing/creativity/youtube-video-ad-best-practices/)
+
+
+Install modal
+Run `pip install modal`
+`modal setup` (login with Modal)
+`modal deploy abcd-modal.py` (deploy)
+
+Can also `serve` to run it on cloud machine or `run` to run it locally
+
+Prepend `py -3.13 -m` to commands if Windows python install is weird
+or Mac: `/usr/local/bin/python3.13 -m`
+
+On Mac, use a venv with: 
+`python3 -m venv venv`
+`source venv/bin/activate`
