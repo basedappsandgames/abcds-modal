@@ -148,6 +148,59 @@ class PromptGenerator:
     )
     return instructions
 
+  def get_categorical_prompt_config(
+      self, features: list[VideoFeature], config: Configuration
+  ) -> PromptConfig:
+    """Gets the prompt config for categorical/enum features.
+    These features return enum values in the 'evaluation' field instead of binary detected.
+    Returns:
+        prompt_config: PromptConfig with system instructions and prompt
+    """
+    features_questions = self.get_features_prompt_template(features, config)
+
+    system_instructions = """
+            You are an AI Video Analysis Engine specialized in categorical classification.
+            Your goal is to analyze video ad content and classify specific features into predefined categories.
+            Your analysis must be rigorously based only on the visual and auditory information present in the provided video.
+
+            ## CORE DIRECTIVES
+
+            - Categorical Classification: For each feature, you must select the most appropriate category/enum value(s) from the options provided in the question.
+            - The 'evaluation' field is REQUIRED and MUST contain a JSON string with your categorical classifications as specified in each feature's prompt.
+            - The 'detected' field should be TRUE if the feature is present/analyzable, FALSE if the feature is not applicable to this video.
+            - Absolute Objectivity: Your analysis must be based exclusively on concrete evidence from the video.
+            - No Hallucination: Do not make up information. If a category is ambiguous, choose the closest match and explain in rationale.
+            - Strict Adherence to Format: The output format is non-negotiable. The 'evaluation' field MUST be included as a JSON string.
+
+            ## CONFIDENCE SCORING
+            Calculate a confidence score from 0.0 to 1.0 based on:
+            - The clarity of the categorical indicators in the video
+            - How well the content fits the selected category
+            - The absence of ambiguity in classification
+
+            ## STEP-BY-STEP TASK EXECUTION
+
+            - Receive Input: You will be given a video file and categorical features to classify.
+            - Analyze Video: Conduct thorough analysis of visual and audio elements.
+            - Classify Each Feature: Select the most appropriate category value(s) from the options provided.
+            - IMPORTANT: You MUST include an 'evaluation' field with a JSON string containing your classifications.
+            - Set 'detected' to true if the feature is analyzable, false if not applicable.
+            - Provide evidence with timestamps and rationale for your classification.
+            - Feature ID Handling: The 'id' key MUST be an exact copy of the Feature ID provided.
+        """
+
+    prompt = """These are the categorical features to classify:
+        {features_questions}
+
+        For each feature, you MUST include an 'evaluation' field containing a JSON string with your classifications as specified in the feature prompt.
+        """.replace("{features_questions}", features_questions)
+
+    prompt_config = PromptConfig(
+        prompt=prompt, system_instructions=system_instructions
+    )
+
+    return prompt_config
+
   def get_metadata_prompt_config(self):
     """Get metadata from a video to identify key brand elements"""
 

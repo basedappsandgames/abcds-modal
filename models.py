@@ -36,6 +36,7 @@ class EvaluationMethod(Enum):
 
     LLMS_AND_ANNOTATIONS = "LLMS_AND_ANNOTATIONS"
     LLMS = "LLMS"
+    LLMS_CATEGORICAL = "LLMS_CATEGORICAL"
     ANNOTATIONS = "ANNOTATIONS"
 
 
@@ -75,6 +76,7 @@ class FeatureEvaluation:
     evidence: str
     strengths: str
     weaknesses: str
+    evaluation: str = ""  # For categorical features, holds JSON string with enum values
 
     def to_dict(self) -> dict:
         """Convert to JSON-serializable dictionary."""
@@ -82,7 +84,7 @@ class FeatureEvaluation:
         category = self.feature.category
         sub_category = self.feature.sub_category
         video_segment = self.feature.video_segment
-        return {
+        result = {
             "feature_id": self.feature.id,
             "feature_name": self.feature.name,
             "category": category.value if hasattr(category, "value") else category,
@@ -100,6 +102,9 @@ class FeatureEvaluation:
             "strengths": self.strengths,
             "weaknesses": self.weaknesses,
         }
+        if self.evaluation:
+            result["evaluation"] = self.evaluation
+        return result
 
 
 @dataclass
@@ -211,6 +216,9 @@ VIDEO_RESPONSE_SCHEMA = {
             "weaknesses": {
                 "type": "string",
             },
+            "evaluation": {
+                "type": "string",
+            },
         },
         "required": [
             "id",
@@ -225,6 +233,7 @@ VIDEO_RESPONSE_SCHEMA = {
             "evidence",
             "strengths",
             "weaknesses",
+            "evaluation",
         ],
     },
 }

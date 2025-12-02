@@ -24,7 +24,7 @@
 from configuration import Configuration
 from gcp_api_services.gemini_api_service import get_gemini_api_service, LLMParameters
 from prompts.prompt_generator import prompt_generator
-from models import VIDEO_RESPONSE_SCHEMA, VIDEO_METADATA_RESPONSE_SCHEMA
+from models import VIDEO_RESPONSE_SCHEMA, VIDEO_METADATA_RESPONSE_SCHEMA, EvaluationMethod
 
 
 class LLMDetector:
@@ -32,6 +32,13 @@ class LLMDetector:
 
   def __init__(self):
     pass
+
+  def _has_categorical_features(self, feature_configs) -> bool:
+    """Check if any features use LLMS_CATEGORICAL evaluation method."""
+    return any(
+        f.evaluation_method == EvaluationMethod.LLMS_CATEGORICAL
+        for f in feature_configs
+    )
 
   def evaluate_features(
       self,
@@ -44,10 +51,19 @@ class LLMDetector:
         f" {evaluation_details.get('category')} and"
         f" {evaluation_details.get('group_by')}... \n"
     )
-    prompt_config = prompt_generator.get_abcds_prompt_config(
-        evaluation_details.get("feature_configs"),
-        config,
-    )
+    feature_configs = evaluation_details.get("feature_configs")
+
+    # Use categorical prompt for categorical features
+    if self._has_categorical_features(feature_configs):
+      prompt_config = prompt_generator.get_categorical_prompt_config(
+          feature_configs,
+          config,
+      )
+    else:
+      prompt_config = prompt_generator.get_abcds_prompt_config(
+          feature_configs,
+          config,
+      )
     # Create new object here to avoid race condition when executing in parallel
     llm_params = LLMParameters()
     llm_params.model_name = config.llm_params.model_name
