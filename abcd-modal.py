@@ -326,6 +326,7 @@ async def assess_video_endpoint(
       "use_annotations": false,
       "run_long_form_abcd": true,
       "run_shorts": true,
+      "run_custom": true,
       "project_zone": "us-central1",
       "use_llms": true,
       "extract_brand_metadata": null,
@@ -375,6 +376,7 @@ async def assess_video_endpoint(
     use_annotations=request.get("use_annotations", False),
     run_long_form_abcd=request.get("run_long_form_abcd", True),
     run_shorts=request.get("run_shorts", True),
+    run_custom=request.get("run_custom", True),
     # Additional parameters
     project_zone=request.get("project_zone", "us-central1"),
     use_llms=request.get("use_llms", True),
@@ -514,6 +516,7 @@ async def stream(
       use_annotations = request.get("use_annotations", False)
       run_long_form_abcd = request.get("run_long_form_abcd", True)
       run_shorts = request.get("run_shorts", True)
+      run_custom = request.get("run_custom", True)
       creative_provider_type = request.get("creative_provider_type", "GCS")
       bq_table_name = request.get("bq_table_name", "")
 
@@ -530,6 +533,7 @@ async def stream(
       # Count feature tasks (sum individual features, not groups)
       long_form_tasks = 0
       shorts_tasks = 0
+      custom_tasks = 0
       if run_long_form_abcd:
         long_form_groups = feature_configs_handler.features_configs_handler.get_features_by_category_by_group_config(
           VideoFeatureCategory.LONG_FORM_ABCD
@@ -540,8 +544,13 @@ async def stream(
           VideoFeatureCategory.SHORTS
         )
         shorts_tasks = sum(len(features) for features in shorts_groups.values())
+      if run_custom:
+        custom_groups = feature_configs_handler.features_configs_handler.get_features_by_category_by_group_config(
+        VideoFeatureCategory.CUSTOM
+        )
+        custom_tasks = sum(len(features) for features in custom_groups.values())
 
-      total[0] = base_steps + long_form_tasks + shorts_tasks
+      total[0] = base_steps + long_form_tasks + shorts_tasks + custom_tasks
       completed[0] = 0
 
       # Step: Setup credentials (already done above)
@@ -612,6 +621,7 @@ async def stream(
       config.use_llms = use_llms
       config.run_long_form_abcd = run_long_form_abcd
       config.run_shorts = run_shorts
+      config.run_custom = run_custom
       config.creative_provider_type = provider_type
       config.extract_brand_metadata = should_extract_brand
       config.verbose = verbose
@@ -704,6 +714,23 @@ async def stream(
           yield msg
         shorts_results = task_result[0]
 
+        # Step: Evaluate Custom (progress updates per feature task)
+        custom_results = []
+        if run_custom:
+            current_step[0] = "Evaluating Custom features"
+        yield progress_msg()
+        async for msg in run_with_keepalive(
+            lambda: video_evaluation_service.video_evaluation_service.evaluate_features(
+            config=config,
+            video_uri=gcs_uri,
+            features_category=VideoFeatureCategory.CUSTOM,
+            on_task_complete=on_task_complete,
+            ),
+            "Evaluating Custom features"
+        ):
+            yield msg
+        custom_results = task_result[0]
+
       # Step: Build assessment
       completed[0] += 1
       current_step[0] = "Building assessment"
@@ -714,6 +741,7 @@ async def stream(
         video_uri=gcs_uri,
         long_form_abcd_evaluated_features=long_form_results,
         shorts_evaluated_features=shorts_results,
+        custom_evaluated_features=custom_results,
         config=config,
       )
 
@@ -725,6 +753,10 @@ async def stream(
         if shorts_results:
           generic_helpers.print_abcd_assessment(
             assessment.brand_name, assessment.video_uri, shorts_results
+          )
+        if custom_results:
+          generic_helpers.print_abcd_assessment(
+            assessment.brand_name, assessment.video_uri, custom_results
           )
 
       # Step: Store in BigQuery (if configured)
