@@ -714,22 +714,22 @@ async def stream(
           yield msg
         shorts_results = task_result[0]
 
-        # Step: Evaluate Custom (progress updates per feature task)
-        custom_results = []
-        if run_custom:
-            current_step[0] = "Evaluating Custom features"
-        yield progress_msg()
-        async for msg in run_with_keepalive(
-            lambda: video_evaluation_service.video_evaluation_service.evaluate_features(
-            config=config,
-            video_uri=gcs_uri,
-            features_category=VideoFeatureCategory.CUSTOM,
-            on_task_complete=on_task_complete,
-            ),
-            "Evaluating Custom features"
-        ):
-            yield msg
-        custom_results = task_result[0]
+      # Step: Evaluate Custom (progress updates per feature task)
+      custom_results = []
+      if run_custom:
+          current_step[0] = "Evaluating Custom features"
+      yield progress_msg()
+      async for msg in run_with_keepalive(
+          lambda: video_evaluation_service.video_evaluation_service.evaluate_features(
+          config=config,
+          video_uri=gcs_uri,
+          features_category=VideoFeatureCategory.CUSTOM,
+          on_task_complete=on_task_complete,
+          ),
+          "Evaluating Custom features"
+      ):
+          yield msg
+      custom_results = task_result[0]
 
       # Step: Build assessment
       completed[0] += 1
