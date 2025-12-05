@@ -756,6 +756,192 @@ def get_gym_class_feature_configs() -> list[VideoFeature]:
             include_in_evaluation=True,
             group_by=VideoSegment.FULL_VIDEO,
         ),
+        # =====================================================================
+        # CONTENT STANDARD FEATURES
+        # =====================================================================
+        VideoFeature(
+            id="content_standard_age_appropriate",
+            name="Age Appropriate Content",
+            category=VideoFeatureCategory.GYM_CLASS,
+            sub_category=VideoFeatureSubCategory.NONE,
+            video_segment=VideoSegment.FULL_VIDEO,
+            evaluation_criteria="""
+                Determine if the content is age appropriate, in good taste, and free
+                of inappropriate language, bigotry, racism, discrimination, or
+                inappropriate sexual content.
+            """,
+            prompt_template="""
+                Analyze whether this Gym Class video contains age-appropriate content.
+
+                VIDEO METADATA:
+                {metadata_summary}
+
+                CONTENT MUST BE FREE OF:
+                - Inappropriate language (profanity, slurs, vulgar language)
+                - Bigotry or hate speech
+                - Racism or racial discrimination
+                - Discrimination based on gender, religion, nationality, disability,
+                  sexual orientation, or age
+                - Inappropriate sexual gestures or comments
+                - Content that is not in good taste
+
+                EVALUATE:
+                - Is the language appropriate for all ages?
+                - Is the content free of discriminatory remarks or themes?
+                - Are there any inappropriate sexual gestures or comments?
+                - Is the overall tone appropriate and in good taste?
+
+                Return TRUE if the content IS age appropriate and in good taste.
+                Return FALSE if there is ANY inappropriate language, discrimination, or sexual content.
+
+                CONFIDENCE CONSIDERATIONS:
+                    - Fully appropriate (0.8-1.0): Clean, family-friendly content
+                    - Mostly appropriate (0.5-0.7): Minor concerns but generally acceptable
+                    - Inappropriate (0.0-0.4): Contains inappropriate content
+            """,
+            extra_instructions=[],
+            evaluation_method=EvaluationMethod.LLMS,
+            evaluation_function="",
+            include_in_evaluation=True,
+            group_by=VideoSegment.FULL_VIDEO,
+        ),
+        VideoFeature(
+            id="content_standard_community_guidelines",
+            name="Adheres to Community Standards",
+            category=VideoFeatureCategory.GYM_CLASS,
+            sub_category=VideoFeatureSubCategory.NONE,
+            video_segment=VideoSegment.FULL_VIDEO,
+            evaluation_criteria="""
+                Determine if the content adheres to community standards and does not
+                glorify harmful behaviors such as eating disorders, bullying, hate
+                crimes, racism, substance abuse, violence, or suicide.
+            """,
+            prompt_template="""
+                Analyze whether this Gym Class video adheres to community standards.
+
+                VIDEO METADATA:
+                {metadata_summary}
+
+                CONTENT THAT VIOLATES COMMUNITY STANDARDS (automatic disqualification):
+                - Glorifying eating disorders
+                - Glorifying or promoting bullying
+                - Glorifying hate crimes
+                - Glorifying racism or racist behavior
+                - Glorifying substance abuse (drugs, alcohol)
+                - Glorifying violence or violent behavior
+                - Glorifying or promoting suicide or self-harm
+
+                EVALUATE:
+                - Does the video glorify or promote any harmful behaviors?
+                - Does it depict bullying in a positive light?
+                - Does it contain hate crime imagery or promotion?
+                - Does it show substance abuse positively?
+                - Does it glorify violence beyond normal gameplay?
+                - Does it reference or promote self-harm or suicide?
+
+                Return TRUE if the content ADHERES to community standards (no harmful glorification).
+                Return FALSE if any community standard violations are present.
+
+                CONFIDENCE CONSIDERATIONS:
+                    - Fully compliant (0.8-1.0): No harmful content, positive messaging
+                    - Compliant (0.5-0.7): No violations but some edge cases
+                    - Violates standards (0.0-0.4): Contains glorification of harmful behaviors
+            """,
+            extra_instructions=[],
+            evaluation_method=EvaluationMethod.LLMS,
+            evaluation_function="",
+            include_in_evaluation=True,
+            group_by=VideoSegment.FULL_VIDEO,
+        ),
+        VideoFeature(
+            id="content_standard_relevance",
+            name="Relevant Gym Class Content",
+            category=VideoFeatureCategory.GYM_CLASS,
+            sub_category=VideoFeatureSubCategory.NONE,
+            video_segment=VideoSegment.FULL_VIDEO,
+            evaluation_criteria="""
+                Determine if the content is relevant to Gym Class, has a generally
+                positive attitude, and does not negatively compare Gym Class to
+                other games or applications.
+            """,
+            prompt_template="""
+                Analyze whether this video has relevant, positive Gym Class content.
+
+                VIDEO METADATA:
+                {metadata_summary}
+
+                CONTENT REQUIREMENTS:
+                - Must be within or about Gym Class game
+                - Should have a generally positive attitude toward the game
+                - Should NOT negatively compare Gym Class to other games
+                - Should NOT portray negativity toward other games or applications
+
+                EVALUATE:
+                - Is the content actually about or within Gym Class?
+                - Does the creator have a positive attitude about the game?
+                - Does the video compare Gym Class negatively to other VR games?
+                - Does the video trash-talk or disparage other games/applications?
+                - Is the overall tone positive and supportive of the game?
+
+                Return TRUE if content is RELEVANT and POSITIVE (about Gym Class, positive tone, no negative comparisons).
+                Return FALSE if content is off-topic, negative toward Gym Class, or disparages other games.
+
+                CONFIDENCE CONSIDERATIONS:
+                    - Highly relevant & positive (0.8-1.0): Clearly about Gym Class with enthusiasm
+                    - Relevant (0.5-0.7): About Gym Class but neutral tone
+                    - Not relevant or negative (0.0-0.4): Off-topic or negative comparisons
+            """,
+            extra_instructions=[],
+            evaluation_method=EvaluationMethod.LLMS,
+            evaluation_function="",
+            include_in_evaluation=True,
+            group_by=VideoSegment.FULL_VIDEO,
+        ),
+        VideoFeature(
+            id="content_standard_parsability",
+            name="Visually Parsable Content",
+            category=VideoFeatureCategory.GYM_CLASS,
+            sub_category=VideoFeatureSubCategory.NONE,
+            video_segment=VideoSegment.FULL_VIDEO,
+            evaluation_criteria="""
+                Determine if the content is visually readable and easy to watch,
+                without excessive text, emojis, or effects that make it difficult
+                to parse or understand.
+            """,
+            prompt_template="""
+                Analyze whether this Gym Class video is visually parsable and easy to watch.
+
+                VIDEO METADATA:
+                {metadata_summary}
+
+                PARSABILITY REQUIREMENTS:
+                - Content should be visually readable
+                - Should NOT have excessive amounts of text cluttering the screen
+                - Should NOT have overwhelming emoji usage
+                - Should NOT have excessive visual effects that obscure content
+                - Viewer should be able to easily follow what's happening
+
+                EVALUATE:
+                - Is the video visually clear and easy to follow?
+                - Is there too much text on screen at once?
+                - Are there excessive emojis cluttering the visuals?
+                - Do visual effects (flashes, transitions, filters) make it hard to watch?
+                - Can you easily see and understand the gameplay/content?
+
+                Return TRUE if content is VISUALLY PARSABLE (easy to watch and understand).
+                Return FALSE if excessive text, emojis, or effects make it difficult to watch.
+
+                CONFIDENCE CONSIDERATIONS:
+                    - Highly parsable (0.8-1.0): Clean, easy to watch, well-balanced visuals
+                    - Parsable (0.5-0.7): Some visual clutter but watchable
+                    - Hard to parse (0.0-0.4): Excessive text, emojis, or effects obscure content
+            """,
+            extra_instructions=[],
+            evaluation_method=EvaluationMethod.LLMS,
+            evaluation_function="",
+            include_in_evaluation=True,
+            group_by=VideoSegment.FULL_VIDEO,
+        ),
     ]
 
     return feature_configs
