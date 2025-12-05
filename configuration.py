@@ -54,6 +54,8 @@ class Configuration:
     self.use_llms = True
     self.run_long_form_abcd: bool = True
     self.run_shorts: bool = True
+    self.run_custom: bool = True
+    self.run_gym_class: bool = False
     self.features_to_evaluate: list[str]  # list of feature ids to run
     self.creative_provider_type = CreativeProviderType.GCS  # GCS by default
 

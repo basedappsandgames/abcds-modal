@@ -71,6 +71,8 @@ def assess_video(
   use_annotations: bool = False,
   run_long_form_abcd: bool = True,
   run_shorts: bool = True,
+  run_custom: bool = True,
+  run_gym_class: bool = False,
   # Additional parameters for full parity with main.py
   project_zone: str = "us-central1",
   use_llms: bool = True,
@@ -112,6 +114,8 @@ def assess_video(
       use_annotations: Whether to use Video Intelligence annotations
       run_long_form_abcd: Evaluate long-form ABCD features
       run_shorts: Evaluate YouTube Shorts features
+      run_custom: Evaluate custom features
+      run_gym_class: Evaluate Gym Class VR features
       project_zone: GCP project zone (default: us-central1)
       use_llms: Whether to use LLMs for evaluation (default: True)
       extract_brand_metadata: Extract brand info from video (None=auto based on brand_name)
@@ -185,6 +189,8 @@ def assess_video(
     config.use_llms = use_llms
     config.run_long_form_abcd = run_long_form_abcd
     config.run_shorts = run_shorts
+    config.run_custom = run_custom
+    config.run_gym_class = run_gym_class
     config.creative_provider_type = provider_type
     config.extract_brand_metadata = should_extract_brand
     config.verbose = verbose
@@ -246,6 +252,8 @@ def assess_video(
     # Run evaluations
     long_form_results = []
     shorts_results = []
+    custom_results = []
+    gym_class_results = []
 
     if run_long_form_abcd:
       long_form_results = (
@@ -265,12 +273,32 @@ def assess_video(
         )
       )
 
+    if run_custom:
+      custom_results = (
+        video_evaluation_service.video_evaluation_service.evaluate_features(
+          config=config,
+          video_uri=gcs_uri,
+          features_category=VideoFeatureCategory.CUSTOM,
+        )
+      )
+
+    if run_gym_class:
+      gym_class_results = (
+        video_evaluation_service.video_evaluation_service.evaluate_features(
+          config=config,
+          video_uri=gcs_uri,
+          features_category=VideoFeatureCategory.GYM_CLASS,
+        )
+      )
+
     # Build assessment
     assessment = models.VideoAssessment(
       brand_name=config.brand_name,
       video_uri=gcs_uri,
       long_form_abcd_evaluated_features=long_form_results,
       shorts_evaluated_features=shorts_results,
+      custom_evaluated_features=custom_results,
+      gym_class_evaluated_features=gym_class_results,
       config=config,  # Include config for BQ storage
     )
 
@@ -283,6 +311,14 @@ def assess_video(
       if shorts_results:
         generic_helpers.print_abcd_assessment(
           assessment.brand_name, assessment.video_uri, shorts_results
+        )
+      if custom_results:
+        generic_helpers.print_abcd_assessment(
+          assessment.brand_name, assessment.video_uri, custom_results
+        )
+      if gym_class_results:
+        generic_helpers.print_abcd_assessment(
+          assessment.brand_name, assessment.video_uri, gym_class_results
         )
 
     # Store results in BigQuery if configured
@@ -327,6 +363,7 @@ async def assess_video_endpoint(
       "run_long_form_abcd": true,
       "run_shorts": true,
       "run_custom": true,
+      "run_gym_class": false,
       "project_zone": "us-central1",
       "use_llms": true,
       "extract_brand_metadata": null,
@@ -377,6 +414,7 @@ async def assess_video_endpoint(
     run_long_form_abcd=request.get("run_long_form_abcd", True),
     run_shorts=request.get("run_shorts", True),
     run_custom=request.get("run_custom", True),
+    run_gym_class=request.get("run_gym_class", False),
     # Additional parameters
     project_zone=request.get("project_zone", "us-central1"),
     use_llms=request.get("use_llms", True),
@@ -517,6 +555,7 @@ async def stream(
       run_long_form_abcd = request.get("run_long_form_abcd", True)
       run_shorts = request.get("run_shorts", True)
       run_custom = request.get("run_custom", True)
+      run_gym_class = request.get("run_gym_class", False)
       creative_provider_type = request.get("creative_provider_type", "GCS")
       bq_table_name = request.get("bq_table_name", "")
 
@@ -549,8 +588,14 @@ async def stream(
         VideoFeatureCategory.CUSTOM
         )
         custom_tasks = sum(len(features) for features in custom_groups.values())
+      gym_class_tasks = 0
+      if run_gym_class:
+        gym_class_groups = feature_configs_handler.features_configs_handler.get_features_by_category_by_group_config(
+          VideoFeatureCategory.GYM_CLASS
+        )
+        gym_class_tasks = sum(len(features) for features in gym_class_groups.values())
 
-      total[0] = base_steps + long_form_tasks + shorts_tasks + custom_tasks
+      total[0] = base_steps + long_form_tasks + shorts_tasks + custom_tasks + gym_class_tasks
       completed[0] = 0
 
       # Step: Setup credentials (already done above)
@@ -622,6 +667,7 @@ async def stream(
       config.run_long_form_abcd = run_long_form_abcd
       config.run_shorts = run_shorts
       config.run_custom = run_custom
+      config.run_gym_class = run_gym_class
       config.creative_provider_type = provider_type
       config.extract_brand_metadata = should_extract_brand
       config.verbose = verbose
@@ -718,18 +764,35 @@ async def stream(
       custom_results = []
       if run_custom:
           current_step[0] = "Evaluating Custom features"
-      yield progress_msg()
-      async for msg in run_with_keepalive(
-          lambda: video_evaluation_service.video_evaluation_service.evaluate_features(
-          config=config,
-          video_uri=gcs_uri,
-          features_category=VideoFeatureCategory.CUSTOM,
-          on_task_complete=on_task_complete,
-          ),
-          "Evaluating Custom features"
-      ):
-          yield msg
-      custom_results = task_result[0]
+          yield progress_msg()
+          async for msg in run_with_keepalive(
+              lambda: video_evaluation_service.video_evaluation_service.evaluate_features(
+              config=config,
+              video_uri=gcs_uri,
+              features_category=VideoFeatureCategory.CUSTOM,
+              on_task_complete=on_task_complete,
+              ),
+              "Evaluating Custom features"
+          ):
+              yield msg
+          custom_results = task_result[0]
+
+      # Step: Evaluate Gym Class (progress updates per feature task)
+      gym_class_results = []
+      if run_gym_class:
+          current_step[0] = "Evaluating Gym Class features"
+          yield progress_msg()
+          async for msg in run_with_keepalive(
+              lambda: video_evaluation_service.video_evaluation_service.evaluate_features(
+              config=config,
+              video_uri=gcs_uri,
+              features_category=VideoFeatureCategory.GYM_CLASS,
+              on_task_complete=on_task_complete,
+              ),
+              "Evaluating Gym Class features"
+          ):
+              yield msg
+          gym_class_results = task_result[0]
 
       # Step: Build assessment
       completed[0] += 1
@@ -742,6 +805,7 @@ async def stream(
         long_form_abcd_evaluated_features=long_form_results,
         shorts_evaluated_features=shorts_results,
         custom_evaluated_features=custom_results,
+        gym_class_evaluated_features=gym_class_results,
         config=config,
       )
 
@@ -757,6 +821,10 @@ async def stream(
         if custom_results:
           generic_helpers.print_abcd_assessment(
             assessment.brand_name, assessment.video_uri, custom_results
+          )
+        if gym_class_results:
+          generic_helpers.print_abcd_assessment(
+            assessment.brand_name, assessment.video_uri, gym_class_results
           )
 
       # Step: Store in BigQuery (if configured)
@@ -808,6 +876,8 @@ def main(
   use_annotations: bool = False,
   run_long_form_abcd: bool = True,
   run_shorts: bool = True,
+  run_custom: bool = True,
+  run_gym_class: bool = False,
   creative_provider_type: str = "GCS",
   use_llms: bool = True,
   extract_brand_metadata: bool = None,
@@ -823,6 +893,7 @@ def main(
   Usage:
       modal run abcd-modal.py --gcs-uri "gs://bucket/video.mp4" --project-id "my-project"
       modal run abcd-modal.py --gcs-uri "https://youtube.com/..." --project-id "my-project" --creative-provider-type YOUTUBE
+      modal run abcd-modal.py --gcs-uri "gs://bucket/video.mp4" --project-id "my-project" --run-gym-class
   """
   result = assess_video.remote(
     gcs_uri=gcs_uri,
@@ -836,6 +907,8 @@ def main(
     use_annotations=use_annotations,
     run_long_form_abcd=run_long_form_abcd,
     run_shorts=run_shorts,
+    run_custom=run_custom,
+    run_gym_class=run_gym_class,
     creative_provider_type=creative_provider_type,
     use_llms=use_llms,
     extract_brand_metadata=extract_brand_metadata,

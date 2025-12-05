@@ -10,6 +10,7 @@ class VideoFeatureCategory(Enum):
     LONG_FORM_ABCD = "LONG_FORM_ABCD"
     SHORTS = "SHORTS"
     CUSTOM = "CUSTOM"
+    GYM_CLASS = "GYM_CLASS"
 
 
 class VideoFeatureSubCategory(Enum):
@@ -116,6 +117,7 @@ class VideoAssessment:
     long_form_abcd_evaluated_features: list[FeatureEvaluation]
     shorts_evaluated_features: list[FeatureEvaluation]
     custom_evaluated_features: list[FeatureEvaluation]
+    gym_class_evaluated_features: list[FeatureEvaluation]
     config: any  # TODO (ae) change this later
 
     def to_dict(self) -> dict:
@@ -131,6 +133,9 @@ class VideoAssessment:
             ],
             "custom_evaluated_features": [
                 f.to_dict() for f in self.custom_evaluated_features
+            ],
+            "gym_class_evaluated_features": [
+                f.to_dict() for f in self.gym_class_evaluated_features
             ],
         }
 

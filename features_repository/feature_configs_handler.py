@@ -24,6 +24,7 @@ import logging
 
 import models
 from features_repository.custom_features import get_custom_feature_configs
+from features_repository.gym_class_features import get_gym_class_feature_configs
 from features_repository.long_form_abcd_features import (
     get_long_form_abcd_feature_configs,
 )
@@ -57,6 +58,10 @@ class FeaturesConfigsHandler:
             custom_abcd_features = get_custom_feature_configs()
 
             return custom_abcd_features
+        elif category.value == VideoFeatureCategory.GYM_CLASS.value:
+            gym_class_features = get_gym_class_feature_configs()
+
+            return gym_class_features
         else:
             logging.log("Category %s not supported. Please check", category)
 
@@ -78,7 +83,7 @@ class FeaturesConfigsHandler:
         return grouped_features
 
     def get_all_features(self):
-        """Gets all feature configs for Full ABCD and Shorts"""
+        """Gets all feature configs for Full ABCD, Shorts, Custom, and Gym Class"""
         feature_configs = []
         feature_configs.extend(
             self.get_feature_configs_by_category(VideoFeatureCategory.LONG_FORM_ABCD)
@@ -88,6 +93,9 @@ class FeaturesConfigsHandler:
         )
         feature_configs.extend(
             self.get_feature_configs_by_category(VideoFeatureCategory.CUSTOM)
+        )
+        feature_configs.extend(
+            self.get_feature_configs_by_category(VideoFeatureCategory.GYM_CLASS)
         )
 
         return feature_configs
