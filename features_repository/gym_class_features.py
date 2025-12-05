@@ -785,6 +785,10 @@ def get_gym_class_feature_configs() -> list[VideoFeature]:
                 - Inappropriate sexual gestures or comments
                 - Content that is not in good taste
 
+                EDGE CASES:
+                - Incidental and limited instances of PG-13 content, eg "shit" in the background music lyrics, are okay
+                - Bleeped and censored profanities are okay
+
                 EVALUATE:
                 - Is the language appropriate for all ages?
                 - Is the content free of discriminatory remarks or themes?
