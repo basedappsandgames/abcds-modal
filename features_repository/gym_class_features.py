@@ -499,6 +499,7 @@ def get_gym_class_feature_configs() -> list[VideoFeature]:
             evaluation_criteria="""
                 Determine if at least half of the video contains actual Gym Class
                 gameplay footage (not screenshots, external clips, or unrelated content).
+                Gym Class is a 3D, first-person VR game with bright colors, where players play basketball, football, baseball, boxing and other sports.
             """,
             prompt_template="""
                 Analyze the Gym Class footage proportion in this video.
