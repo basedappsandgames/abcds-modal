@@ -406,8 +406,8 @@ def get_gym_class_feature_configs() -> list[VideoFeature]:
 
                 CONFIDENCE CONSIDERATIONS:
                     - Ideal length (0.8-1.0): 9-20 seconds
-                    - Acceptable length (0.5-0.7): 5-30 seconds
-                    - Poor length (0.0-0.4): Under 4 seconds or over 60 seconds
+                    - Acceptable length (0.5-0.7): 6-30 seconds
+                    - Poor length (0.0-0.4): Under 6 seconds or over 60 seconds
             """,
             extra_instructions=[],
             evaluation_method=EvaluationMethod.ANNOTATIONS,
@@ -417,13 +417,13 @@ def get_gym_class_feature_configs() -> list[VideoFeature]:
         ),
         VideoFeature(
             id="gc_meets_minimum_duration",
-            name="Meets Minimum Duration (4+ seconds)",
+            name="Meets Minimum Duration (6+ seconds)",
             category=VideoFeatureCategory.GYM_CLASS,
             sub_category=VideoFeatureSubCategory.NONE,
             video_segment=VideoSegment.FULL_VIDEO,
             evaluation_criteria="""
                 Determine if the video meets the minimum duration requirement
-                of at least 4 seconds.
+                of at least 6 seconds.
             """,
             prompt_template="""
                 Verify this Gym Class video meets minimum duration requirements.
@@ -431,18 +431,18 @@ def get_gym_class_feature_configs() -> list[VideoFeature]:
                 VIDEO METADATA:
                 {metadata_summary}
 
-                Videos under 4 seconds are considered too short and automatically
+                Videos under 6 seconds are considered too short and automatically
                 receive a low quality score.
 
                 EVALUATE:
-                - Is the video at least 4 seconds long?
+                - Is the video at least 6 seconds long?
 
-                Return TRUE if the video is AT LEAST 4 SECONDS long.
-                Return FALSE if the video is under 4 seconds.
+                Return TRUE if the video is AT LEAST 6 SECONDS long.
+                Return FALSE if the video is under 6 seconds.
 
                 CONFIDENCE CONSIDERATIONS:
-                    - Meets minimum (0.9-1.0): 4+ seconds
-                    - Below minimum (0.0-0.3): Under 4 seconds
+                    - Meets minimum (0.9-1.0): 6+ seconds
+                    - Below minimum (0.0-0.3): Under 6 seconds
             """,
             extra_instructions=[],
             evaluation_method=EvaluationMethod.ANNOTATIONS,
