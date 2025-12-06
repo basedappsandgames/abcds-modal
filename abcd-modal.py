@@ -57,7 +57,7 @@ def setup_gcp_credentials():
 @app.function(
   image=image,
   secrets=[modal.Secret.from_name("gcp-credentials")],
-  timeout=600,  # 10 min for video processing
+  timeout=1800,  # 30 min for video processing
 )
 def assess_video(
   gcs_uri: str,
@@ -339,7 +339,7 @@ def assess_video(
 @app.function(
   image=image,
   secrets=[modal.Secret.from_name("gcp-credentials")],
-  timeout=600,
+  timeout=1800,
 )
 @modal.fastapi_endpoint(method="POST")
 async def assess_video_endpoint(
@@ -444,7 +444,7 @@ async def assess_video_endpoint(
 @app.function(
   image=image,
   secrets=[modal.Secret.from_name("gcp-credentials")],
-  timeout=600,
+  timeout=1800,
 )
 @modal.fastapi_endpoint(method="POST")
 async def stream(
